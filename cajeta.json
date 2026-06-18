@@ -1,0 +1,57 @@
+{
+    // ifx macOS backend — a LIBRARY project (no entry-method → emits a .cja archive).
+    // Implements the cajeta.ifx backend SPI and registers itself for the macOS target.
+
+    "details": {
+        "name":               "dev.cajeta.ifx.macos",
+        "version":            "0.1.0",
+        "description":        "ifx macOS backend — window / input / audio for the Cajeta interface framework.",
+        "license":            "MIT",
+        "authors":            ["Julian Klappenbach <julian@twilight.digital>"],
+        "cajeta-lang-version": "1.0"
+    },
+
+    "settings": {
+        "capabilities": ["window", "input", "audio"],
+
+        // cajeta.ifx (the contract this implements) is stdlib — implicit, not declared.
+        "dependencies": {
+            "cajeta.lang": "*"
+        },
+        "dev-dependencies": {
+            "cajeta.testkit": "1.0.*"
+        },
+        "repositories": [
+            { "name": "central", "url": "https://repo.cajeta.org", "priority": 0 }
+        ],
+
+        // No `entry-method` → library (.cja). Intended target: macOS.
+        "build": {
+            "target": "host"
+        }
+    },
+
+    "tasks": {
+        "build": {
+            "description": "Compile to a .cja library archive",
+            "actions": [ { "action": "build", "flavor": "debug", "profile": "dev", "id": "art" } ],
+            "outputs": { "path": "${art.path}", "sha256": "${art.sha256}" }
+        },
+        "test": {
+            "description": "Build + run unit tests",
+            "actions": [
+                { "action": "build", "flavor": "debug", "profile": "test", "id": "art" },
+                { "action": "test",  "params": { "input": "${art.path}" } }
+            ]
+        },
+        "release": {
+            "description": "Optimized release build (.cja)",
+            "actions": [ { "action": "build", "flavor": "release", "profile": "release", "id": "art" } ],
+            "outputs": { "path": "${art.path}", "sha256": "${art.sha256}" }
+        },
+        "clean": {
+            "description": "Wipe build outputs",
+            "actions": [ { "action": "clean" } ]
+        }
+    }
+}

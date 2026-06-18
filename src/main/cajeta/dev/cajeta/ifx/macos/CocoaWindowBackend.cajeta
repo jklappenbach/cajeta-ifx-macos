@@ -1,0 +1,40 @@
+package dev.cajeta.ifx.macos;
+
+import cajeta.ifx.WindowBackend;
+import cajeta.ifx.Window;
+import cajeta.ifx.Surface;
+import cajeta.ifx.WindowEvent;
+import cajeta.ifx.BackendRegistry;
+
+/**
+ * CocoaWindowBackend — the macOS window/surface backend for ifx, FFI-binding Cocoa / AppKit (NSWindow + CAMetalLayer).
+ * Registers itself so the ifx dispatcher can select it on macOS. v0.1 skeleton — no FFI yet.
+ *
+ * Audio (CoreAudio (AVAudioEngine)) and input (GameController + NSEvent / IOKit HID) backends are sibling classes in this library; see
+ * documents/cajeta-ifx-macos-plan.md.
+ */
+public final class CocoaWindowBackend implements WindowBackend {
+
+    /** Called at load to register this backend with ifx. */
+    public static void register() {
+        BackendRegistry.registerWindow(new CocoaWindowBackend());
+    }
+
+    public boolean probe()    { return false; }       // TODO: detect the macOS environment
+    public int32   priority() { return 100; }
+    public String  name()     { return "macos"; }
+
+    public Window createWindow(String title, uint32 width, uint32 height) {
+        return null;   // TODO: create a window via Cocoa / AppKit (NSWindow + CAMetalLayer)
+    }
+
+    public Surface surfaceOf(Window w) {
+        return null;   // TODO: opaque surface handle for VK_EXT_metal_surface (MoltenVK)
+    }
+
+    public WindowEvent[] poll(Window w) {
+        return null;   // TODO: drain the macOS event queue
+    }
+
+    public void destroy(Window w) { }
+}
