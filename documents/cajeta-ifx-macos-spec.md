@@ -37,3 +37,46 @@ overrides). Umbrella design: the cajeta repo's `documents/cajeta-gfx/cajeta-gfx-
   §9.4 binding model).
 - Contract: `cajeta.ifx` — `Backend` / `WindowBackend` / `AudioBackend` / `InputBackend`.
 - Selector: the `cajeta-ifx-backend` melt (target → backend).
+
+---
+
+## Appendix A — Vendor SDK details (2025-2026 research)
+
+### Binding: the Objective-C wall (the dominant constraint)
+Apple frameworks split two ABI families:
+- **C-ABI (direct FFI):** Core Audio / Audio Unit / AudioToolbox, **IOKit HID**, Core Foundation,
+  and `CAMetalLayer` interop via MoltenVK (`VK_EXT_metal_surface` takes a `CAMetalLayer*`). `metal-cpp`
+  gives Metal a C++ binding.
+- **Obj-C only (NO C API):** **AppKit** (`NSApplication`/`NSWindow`/`NSView`), **GameController**
+  (`GCController`/`GCKeyboard`/`GCMouse`), `NSEvent`, **AVFoundation/AVAudioEngine**.
+→ **This backend ships a thin Obj-C/Obj-C++ (`.m`/`.mm`) shim** exposing `extern "C"` for the AppKit
+windowing bootstrap + GameController; binds Core Audio + IOKit directly via C FFI. (Alternative:
+`objc_msgSend` runtime FFI — brittle, every call site cast to its exact prototype on arm64.)
+
+### SDK reference
+| Domain | Modern (framework) | C-ABI? | Legacy / fallback | Deprecated | Min |
+|---|---|---|---|---|---|
+| Window | **AppKit** `NSWindow`/`NSView` + **CAMetalLayer** | Obj-C (shim) | — | OpenGL (4.1, 2018) | macOS 11+ |
+| Surface | **MoltenVK** `VK_EXT_metal_surface` (`vkCreateMetalSurfaceEXT`, `CAMetalLayer*`); native Metal/`metal-cpp` | C interop | — | `VK_MVK_macos_surface` | — |
+| Input | **GameController** (Xbox/DualSense incl. haptics/adaptive triggers/gyro; `GCKeyboard`/`GCMouse` macOS 11+); `NSEvent` for UI | Obj-C (shim) | **IOKit HID** (`IOHIDManager`) | — | 10.15+ |
+| Audio | **Audio Unit / Core Audio** (`AUHAL`/`kAudioUnitSubType_HALOutput`, pull-model real-time callback — output + capture) | **C (direct)** | `AVAudioEngine` (Obj-C convenience) | OpenAL (2018) | — |
+
+**No native Vulkan on Apple** — only MoltenVK (Vulkan 1.4 subset, `VK_KHR_portability_subset`).
+
+### Capability support & gaps (vs spec §9.7)
+- **Main-thread requirement:** `NSApplication` + all NSWindow/NSView/Core-Animation work + event
+  processing MUST run on the main thread; the framework owns the run loop. The portable contract's
+  "event loop on the window's creating thread" maps to "main thread" here.
+- **Supported (strengths):** multi/resizable windows, positioning, cursor warp, first-class
+  DualSense/Xbox controllers (haptics, adaptive triggers, gyro, touchpad), low-latency audio (Audio
+  Unit, C). Loopback capture = partial (ScreenCaptureKit).
+- **Gaps:** Obj-C binding tax (the shim); Vulkan only via MoltenVK subset; mic capture needs
+  `NSMicrophoneUsageDescription` + entitlement; **notarization + Hardened Runtime / App-Sandbox
+  entitlements** for distribution.
+
+### References
+- Game window for Metal (macOS): https://developer.apple.com/documentation/Metal/managing-your-game-window-for-metal-in-macos
+- NSApplication (main-thread run loop): https://developer.apple.com/documentation/appkit/nsapplication
+- GameController: https://developer.apple.com/documentation/gamecontroller · Core Audio: https://developer.apple.com/documentation/coreaudio
+- MoltenVK / `VK_EXT_metal_surface`: https://github.com/KhronosGroup/MoltenVK
+- OpenGL deprecation → Metal: https://developer.apple.com/documentation/Metal/migrating-opengl-code-to-metal

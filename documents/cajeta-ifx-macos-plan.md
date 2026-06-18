@@ -51,3 +51,34 @@ macOS window creation via Cocoa / AppKit (NSWindow + CAMetalLayer), producing th
 - Gated on the stdlib `cajeta.ifx` contract landing (`runtime/src/cajeta/ifx/`).
 - The Surface/WSI hand-off is gated on the gfx swapchain (`cajeta.gpu.gfx`, spec Part GP-1 §4.2).
 - Versioned independently of the other backends (own macOS API cadence).
+
+---
+
+## Appendix A — Binding & capability-gap work (from vendor research)
+
+### 5. Binding (Objective-C shim + C FFI)
+   **TDD**
+   a. [ ] The `extern "C"` shim brings up `NSApplication`/`NSWindow`/`NSView` + `CAMetalLayer` on the
+      **main thread** and pumps events.
+   b. [ ] GameController connect/value callbacks marshal through the shim into C callbacks.
+
+   **Deliverables**
+   a. [ ] An Obj-C/Obj-C++ (`.m`/`.mm`) shim for AppKit windowing + GameController, flat C surface.
+   b. [ ] Direct C FFI for Core Audio / Audio Unit (`AUHAL`, output+capture) and IOKit HID.
+   c. [ ] MoltenVK `VK_EXT_metal_surface` from the shim's `CAMetalLayer`.
+
+   **Acceptance Criteria**
+   a. [ ] No Obj-C types cross into Cajeta; the engine sees only the C shim + C audio/HID APIs.
+
+### 6. Capability gaps & fallbacks (vs spec §9.7)
+   **TDD**
+   a. [ ] Window/event work asserted on the main thread; off-main calls rejected.
+
+   **Deliverables**
+   a. [ ] main-thread run-loop integration; mic `NSMicrophoneUsageDescription` + entitlement; the
+      Hardened-Runtime/notarization (and App-Sandbox entitlement) build path.
+   b. [ ] `supports()` = full desktop set (multi-window, positioning, warp, rumble/adaptive-triggers/
+      gyro via GameController, low-latency audio); loopback capture partial (ScreenCaptureKit).
+
+   **Acceptance Criteria**
+   a. [ ] A window + DualSense input + low-latency Audio-Unit output work; build notarizes.
