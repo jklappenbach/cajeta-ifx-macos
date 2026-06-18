@@ -82,3 +82,32 @@ macOS window creation via Cocoa / AppKit (NSWindow + CAMetalLayer), producing th
 
    **Acceptance Criteria**
    a. [ ] A window + DualSense input + low-latency Audio-Unit output work; build notarizes.
+
+---
+
+## Appendix B — Interop implementation (Obj-C)
+
+### 7. Obj-C runtime FFI core
+   **TDD**
+   a. [ ] A typed `objc_msgSend` cast calls a known selector (e.g. `[NSProcessInfo processInfo]`)
+      and returns the right value on arm64 + x86_64.
+   b. [ ] A runtime-built delegate's IMP receives `applicationDidFinishLaunching:`.
+
+   **Deliverables**
+   a. [ ] `@Native` bindings: `objc_getClass`, `sel_registerName`, typed `objc_msgSend` (+ `_stret`/
+      `_fpret` on x86_64); cached selectors/classes.
+   b. [ ] explicit retain/release + `objc_autoreleasePoolPush/Pop` per frame/callback.
+   c. [ ] runtime delegate builder (`objc_allocateClassPair`+`class_addMethod`, IMP = exported C fn).
+
+   **Acceptance Criteria**
+   a. [ ] Ordinary AppKit/GameController calls work via FFI with correct memory behavior.
+
+### 8. Clang shim + build integration
+   **Deliverables**
+   a. [ ] `.m`/`.mm` shim (`-fobjc-arc`) for blocks (`valueChangedHandler`), the `[NSApp run]`
+      bootstrap (owns thread 0, callbacks into Cajeta), and heavy delegates; `extern "C"` surface.
+   b. [ ] build-tool step: compile the shim with clang, link `-framework AppKit/GameController/
+      AVFoundation/QuartzCore`; notarization/Hardened-Runtime path.
+
+   **Acceptance Criteria**
+   a. [ ] Window + DualSense (block handler) + main-thread loop work; the shim is the only Obj-C TU.

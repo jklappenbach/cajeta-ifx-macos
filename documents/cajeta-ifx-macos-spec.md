@@ -80,3 +80,50 @@ windowing bootstrap + GameController; binds Core Audio + IOKit directly via C FF
 - GameController: https://developer.apple.com/documentation/gamecontroller · Core Audio: https://developer.apple.com/documentation/coreaudio
 - MoltenVK / `VK_EXT_metal_surface`: https://github.com/KhronosGroup/MoltenVK
 - OpenGL deprecation → Metal: https://developer.apple.com/documentation/Metal/migrating-opengl-code-to-metal
+
+---
+
+## Appendix B — Interop mechanism (Obj-C via C runtime + clang shim)
+
+**Feasibility: yes.** Apple's frameworks are reachable through `libobjc`'s **C ABI**, and Cajeta's
+`@Native("symbol")` already binds typed methods to C symbols over a stable `extern "C"` ABI (it
+lowers through LLVM, same toolchain family as clang). No Obj-C *language* support is required in
+Cajeta. Two paths, used together:
+
+### 1. Direct `libobjc` FFI (the floor — ~90% of calls)
+- `@Native`-bind `objc_getClass(const char*)`, `sel_registerName(const char*)`, and **typed casts of
+  `objc_msgSend`**. `objc_msgSend` is **not variadic** — each call site is a function pointer cast to
+  the **exact** callee prototype (args + return widths). **arm64:** `objc_msgSend` for *everything*
+  (small structs in regs, large via x8). **x86_64:** route struct returns → `objc_msgSend_stret`,
+  `long double` → `objc_msgSend_fpret`. (This is the Rust `objc2` / Zig `zig-objc` pattern — a
+  codegen-time monomorphic `msgSend<Ret,Args>` + cached interned selectors/classes.)
+- **Memory (explicit — Cajeta is not ARC-aware):** `objc_retain`/`objc_release`/`objc_autorelease`;
+  wrap each frame/callback in `objc_autoreleasePoolPush`/`Pop`. Honor `alloc`/`new`/`copy` = +1.
+- **Delegates at runtime:** `objc_allocateClassPair(NSObject,"…",0)` + `class_addMethod(sel, IMP,
+  "v@:@")` where IMP is a **Cajeta-exported `(id self, SEL _cmd, …)` C function** + `class_addProtocol`
+  + `objc_registerClassPair`. Stash a C context via an ivar / `objc_setAssociatedObject`. Covers
+  `NSApplicationDelegate`, target/action, `NSNotificationCenter` observers (GameController connect).
+
+### 2. A thin clang `.m`/`.mm` shim (for the painful parts)
+Compiled `clang -fobjc-arc -c shim.m`, linked `-framework AppKit -framework GameController
+-framework AVFoundation -framework QuartzCore`. Encapsulates:
+- **Blocks** — `GCControllerAxisInput.valueChangedHandler`, AVFoundation completion handlers. The
+  block ABI (`_NSConcreteStackBlock`, copy/dispose helpers) is error-prone by hand; let clang's `^{}`
+  wrap a passed-in C fn-ptr + `void* ctx`.
+- **App/run-loop bootstrap** — `[NSApplication sharedApplication]` + `[NSApp run]` own **thread 0**;
+  the shim takes `main()` and calls back into Cajeta via a C callback once the run loop is live
+  (sidesteps main-thread affinity + "never returns").
+- **Heavy delegates** with many `@encode` signatures.
+
+Direct C FFI already works for **Core Audio / Audio Unit (`AUHAL`)** and **IOKit HID** — no shim.
+
+### Optional language ergonomic
+An `@ObjC` / `@Native(objc="ClassName","selector:")` form the compiler lowers to
+selector-registration + a correctly-typed `objc_msgSend` cast — **sugar over the FFI floor above**,
+not a new capability. Lets backend code read `app.run()` instead of hand-written msgSend casts.
+
+### Sources
+- objc4 `message.h` (msgSend variants, arm64): https://opensource.apple.com/source/objc4/objc4-781/runtime/message.h.auto.html
+- objc_msgSend must-cast: https://www.mikeash.com/pyblog/objc_msgsends-new-prototype.html
+- Runtime classes from C: https://www.mikeash.com/pyblog/friday-qa-2010-11-6-creating-classes-at-runtime-in-objective-c.html
+- Block ABI: https://clang.llvm.org/docs/Block-ABI-Apple.html · Rust objc2: https://docs.rs/objc2 · zig-objc: https://github.com/mitchellh/zig-objc
